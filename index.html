@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIGC 辨识能力测评</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f4f7f9;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            min-height: 500px; /* 给容器一个最小高度 */
+            transition: opacity 0.3s ease;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        
+        /* 问卷区域 */
+        #quiz-area {
+            flex-grow: 1;
+            display: none; /* 默认隐藏 */
+            width: 100%;
+        }
+        .progress-bar {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            height: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .progress-bar-inner {
+            height: 100%;
+            width: 0%;
+            background-color: #3498db;
+            transition: width 0.3s ease;
+        }
+        .question-card {
+            text-align: left;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: #fdfdfd;
+        }
+        .question-text {
+            white-space: pre-wrap;
+            line-height: 1.6;
+            color: #555;
+            margin-bottom: 20px;
+        }
+        .media-container {
+            margin-bottom: 20px;
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #f0f0f0;
+        }
+        .media-container img,
+        .media-container video {
+            display: block;
+            width: 100%;
+            height: auto;
+            max-height: 400px;
+            object-fit: contain;
+            margin: 0 auto;
+        }
+        .media-container audio {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .options label {
+            cursor: pointer;
+            padding: 12px 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            transition: all 0.2s ease;
+            display: block;
+        }
+        .options input[type="radio"] {
+            display: none;
+        }
+        .options input[type="radio"]:checked + label {
+            background-color: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+
+        /* 导航按钮 */
+        .navigation-buttons {
+            margin-top: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .nav-btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 1em;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .nav-btn:hover:not(:disabled) {
+            background-color: #2980b9;
+        }
+        .nav-btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        #submit-btn {
+            background-color: #27ae60;
+        }
+        #submit-btn:hover:not(:disabled) {
+            background-color: #2ecc71;
+        }
+
+        /* 加载和结果区域 */
+        #loading, #result-container {
+            font-size: 1.5em;
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        #result-container {
+            display: none;
+            flex-direction: column;
+        }
+        #result-container h2 {
+            color: #2c3e50;
+        }
+        #result-container p {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #e74c3c;
+        }
+        #result-container p.good-score {
+            color: #27ae60;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AIGC 辨识能力测评</h1>
+
+        <div id="loading">
+            <p>正在努力加载题目中...</p>
+        </div>
+
+        <div id="quiz-area">
+            <div class="progress-bar">
+                <div class="progress-bar-inner"></div>
+            </div>
+            <div id="question-container">
+                <!-- 单个题目将在这里渲染 -->
+            </div>
+            <div class="navigation-buttons">
+                <button id="prev-btn" class="nav-btn">上一题</button>
+                <span id="question-counter"></span>
+                <button id="next-btn" class="nav-btn">下一题</button>
+            </div>
+        </div>
+
+        <div id="result-container">
+            <!-- 结果将在这里显示 -->
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM 元素获取
+            const loadingDiv = document.getElementById('loading');
+            const quizArea = document.getElementById('quiz-area');
+            const questionContainer = document.getElementById('question-container');
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const progressBarInner = document.querySelector('.progress-bar-inner');
+            const questionCounter = document.getElementById('question-counter');
+            const resultContainer = document.getElementById('result-container');
+
+            const API_BASE_URL = 'http://ptyz.zabc.net';
+
+            // 状态变量
+            let allQuestions = [];
+            let userAnswers = {}; // 使用对象存储答案, key为questionId
+            let currentQuestionIndex = 0;
+
+            // --- 所有函数都已包含在此处 ---
+
+            // 更新导航按钮状态
+            function updateNavButtons(index) {
+                prevBtn.disabled = index === 0;
+                if (index === allQuestions.length - 1) {
+                    nextBtn.textContent = '提交答案';
+                    // 动态切换ID以便应用不同样式, 但事件监听器需要更灵活地处理
+                    nextBtn.id = 'submit-btn'; 
+                } else {
+                    nextBtn.textContent = '下一题';
+                    nextBtn.id = 'next-btn';
+                }
+            }
+
+            // 渲染当前题目
+            function renderQuestion(index) {
+                const q = allQuestions[index];
+                if (!q) return;
+
+                // 更新进度条和计数器
+                const progress = ((index + 1) / allQuestions.length) * 100;
+                progressBarInner.style.width = `${progress}%`;
+                questionCounter.textContent = `${index + 1} / ${allQuestions.length}`;
+                
+                // 准备媒体内容的 HTML
+                let mediaHtml = '';
+                if (q.media_url) {
+                    switch (q.media_type) {
+                        case 'image':
+                            mediaHtml = `<div class="media-container"><img src="${q.media_url}" alt="题目图片"></div>`;
+                            break;
+                        case 'video':
+                            mediaHtml = `<div class="media-container"><video src="${q.media_url}" controls preload="metadata"></video></div>`;
+                            break;
+                        case 'audio':
+                            mediaHtml = `<div class="media-container"><audio src="${q.media_url}" controls preload="metadata"></audio></div>`;
+                            break;
+                    }
+                }
+
+                // 组合最终的题目 HTML
+                questionContainer.innerHTML = `
+                    <div class="question-card" data-question-id="${q.id}">
+                        <div class="question-text">${q.content}</div>
+                        ${mediaHtml}
+                        <div class="options">
+                            <div>
+                                <input type="radio" id="human-${q.id}" name="q-${q.id}" value="0">
+                                <label for="human-${q.id}">人类创作 / 真实</label>
+                            </div>
+                            <div>
+                                <input type="radio" id="ai-${q.id}" name="q-${q.id}" value="1">
+                                <label for="ai-${q.id}">AI 生成 / 合成</label>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // 恢复已选答案
+                const savedAnswer = userAnswers[q.id];
+                if (savedAnswer !== undefined) {
+                    const radioToCheck = questionContainer.querySelector(`input[value="${savedAnswer}"]`);
+                    if (radioToCheck) radioToCheck.checked = true;
+                }
+
+                // 为新渲染的选项绑定事件
+                const radioButtons = questionContainer.querySelectorAll(`input[name="q-${q.id}"]`);
+                radioButtons.forEach(radio => {
+                    radio.addEventListener('change', (e) => {
+                        userAnswers[q.id] = Number(e.target.value);
+                    });
+                });
+
+                // 更新按钮状态
+                updateNavButtons(index);
+            }
+
+            // 提交答案
+            async function submitAnswers() {
+                // 获取当前按钮以禁用它
+                const submitButton = document.getElementById('submit-btn') || document.getElementById('next-btn');
+                submitButton.disabled = true;
+                submitButton.textContent = '正在提交...';
+
+                const answersToSubmit = Object.keys(userAnswers).map(questionId => ({
+                    question_id: Number(questionId),
+                    user_answer: userAnswers[questionId]
+                }));
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/submit`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(answersToSubmit)
+                    });
+                    if (!response.ok) {
+                         const errorData = await response.json();
+                         throw new Error(errorData.error || '提交失败');
+                    }
+                    
+                    const result = await response.json();
+                    displayResult(result);
+
+                } catch (error) {
+                    alert(`提交出错: ${error.message}`);
+                    submitButton.disabled = false;
+                    updateNavButtons(currentQuestionIndex);
+                }
+            }
+            
+            // 显示结果
+            function displayResult(result) {
+                quizArea.style.display = 'none';
+                resultContainer.style.display = 'flex';
+
+                const scorePercentage = result.total > 0 ? (result.score / result.total) : 0;
+                let scoreClass = scorePercentage >= 0.7 ? 'good-score' : '';
+
+                resultContainer.innerHTML = `
+                    <div>
+                        <h2>测评完成！</h2>
+                        <p class="${scoreClass}">您答对了 ${result.score} / ${result.total} 题！</p>
+                    </div>
+                `;
+            }
+
+            // 初始化函数
+            async function initializeQuiz() {
+                loadingDiv.style.display = 'flex';
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/questions`);
+                    if (!response.ok) throw new Error('网络请求失败，请检查后端服务是否开启。');
+                    
+                    allQuestions = await response.json();
+                    if (allQuestions.length > 0) {
+                        quizArea.style.display = 'block';
+                        renderQuestion(currentQuestionIndex);
+                    } else {
+                        throw new Error('未能获取到任何题目，请检查数据库。');
+                    }
+                    
+                } catch (error) {
+                    const container = document.querySelector('.container');
+                    container.innerHTML = `<p style="color:red; font-size:1.2em;">加载题目失败: ${error.message}</p>`;
+                } finally {
+                    loadingDiv.style.display = 'none';
+                }
+            }
+
+            // 导航按钮事件监听
+            prevBtn.addEventListener('click', () => {
+                if (currentQuestionIndex > 0) {
+                    currentQuestionIndex--;
+                    renderQuestion(currentQuestionIndex);
+                }
+            });
+            
+            // 关键：对父容器监听点击，通过 e.target.id 判断是下一题还是提交
+            document.querySelector('.navigation-buttons').addEventListener('click', async (e) => {
+                if (e.target.id === 'next-btn') {
+                    const currentQuestionId = allQuestions[currentQuestionIndex].id;
+                    if (userAnswers[currentQuestionId] === undefined) {
+                        alert('请选择一个答案后再进入下一题');
+                        return;
+                    }
+                    if (currentQuestionIndex < allQuestions.length - 1) {
+                        currentQuestionIndex++;
+                        renderQuestion(currentQuestionIndex);
+                    }
+                } else if (e.target.id === 'submit-btn') {
+                     const currentQuestionId = allQuestions[currentQuestionIndex].id;
+                    if (userAnswers[currentQuestionId] === undefined) {
+                        alert('请回答最后一题后再提交');
+                        return;
+                    }
+                    await submitAnswers();
+                }
+            });
+
+            // 启动测评
+            initializeQuiz();
+        });
+    </script>
+</body>
+</html>
